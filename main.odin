@@ -35,10 +35,15 @@ run_compress :: proc "c" (quality : i32, file_name, out_name, preset : string) -
     p.command = {"ffmpeg",  "-i", file_name, "-c:v", "libx264", "-crf", fmt.tprintf("%d", 51-quality), "-preset", preset, "-c:a", "copy", out_name}
     p.working_dir = os.get_current_directory()
     if state, stdout, stderr, err := os2.process_exec(p, context.allocator); err == nil {
+        delete(stdout)
+        delete(stderr)
         return true
     } else {
         fmt.println("Erro ao executar ffmpeg")
         fmt.println(string(stderr))
+        fmt.println(string(stdout))
+        delete(stdout)
+        delete(stderr)
         return false
     }
 }
