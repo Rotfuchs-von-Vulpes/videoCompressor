@@ -161,10 +161,10 @@ parse_args :: proc (args : []string) -> (bool, string, int, string) {
 
 main :: proc () {
     args := os.args[1:]
-    t := time.now()
     if len(args) == 0 {
         fmt.println("Insira o nome do arquivo de video, exemplo: \"video.mp4\" -p veryslow -s 10")
     } else if ok, file, target_size, preset := parse_args(args); ok {
+        t := time.now()
         if ok := binary_search(file, target_size, preset); ok {
             fmt.println("Pronto!")
         }
