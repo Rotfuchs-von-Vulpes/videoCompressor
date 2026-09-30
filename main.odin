@@ -29,23 +29,45 @@ get_out_name :: proc (video_name : string, out_count : int) -> string {
     return strings.to_string(b)
 }
 
-run_compress :: proc "c" (quality : i32, file_name, out_name, preset : string) -> bool {
+run_compress :: proc "c" (quality : i32, file_name, out_name, preset : string, size : i64) -> (bool, bool) {
     context = runtime.default_context()
     p := os2.Process_Desc{}
     p.command = {"ffmpeg",  "-i", file_name, "-c:v", "libx264", "-crf", fmt.tprintf("%d", 51-quality), "-preset", preset, "-c:a", "copy", out_name}
     p.working_dir = os.get_current_directory()
-    if state, stdout, stderr, err := os2.process_exec(p, context.allocator); err == nil {
-        delete(stdout)
-        delete(stderr)
-        return true
-    } else {
+    process, err := os2.process_start(p)
+
+    if err != nil {
         fmt.println("Erro ao executar ffmpeg")
-        fmt.println(string(stderr))
-        fmt.println(string(stdout))
-        delete(stdout)
-        delete(stderr)
-        return false
+        return false, false
     }
+
+    fmt.println("FFmpeg iniciado. Monitorando tamanho do arquivo...")
+
+    for {
+        state, wait_err := os2.process_wait(process, time.Millisecond * 100)
+        if wait_err == nil {
+            fmt.printfln("FFmpeg terminou com sucesso")
+            return true, false
+        }
+
+        if fi, stat_err := os.stat(out_name); stat_err == nil {
+            if fi.size > size {
+                fmt.printfln("Arquivo muito grande.")
+                fmt.println("Parando processo do FFmpeg...")
+                
+                if err := os2.process_kill(process); err != nil {
+                    fmt.println("Erro ao terminar processo: ", err)
+                }
+
+                return true, true
+            }
+        }
+
+        time.sleep(time.Millisecond * 500)
+    }
+
+
+    return false, false
 }
 
 read_size :: proc (out : string) -> (bool, int) {
@@ -84,16 +106,19 @@ binary_search :: proc (file_name : string, target_size : int, preset : string) -
             }
         }
         append(&history, medium)
-
-        if !run_compress(medium, file_name, out_name, preset) {
+        
+        fmt.printfln("Iniciando tentativa numero %d.", out_count)
+        ok, larger := run_compress(medium, file_name, out_name, preset, i64(target_size))
+        if !ok {
             return false
         }
         if ok, size := read_size(out_name); ok {
             fmt.printfln("tentativa numero %d, tamanho: %fMiB", out_count, f32(size) / megabyte)
-            if size > target_size {
+            if larger {
+                time.sleep(time.Millisecond * 100)
                 delete_video(out_name)
                 ma = medium
-            } else if size <= target_size {
+            } else {
                 if best_idx > 0 do delete_video(get_out_name(video_name, best_idx))
                 best_idx = out_count
                 mi = medium
